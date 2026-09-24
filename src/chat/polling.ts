@@ -1,22 +1,37 @@
-import { GreenApiError, errorMessage, parseOutgoingStatus, parseTextMessage } from '../api/green-api';
-import type { GreenApiTelegram, IncomingTextMessage, Notification, OutgoingMessageStatus } from '../api/green-api';
+import {
+  GreenApiError,
+  errorMessage,
+  parseOutgoingStatus,
+  parseTextMessage,
+} from "../api/green-api";
+import type {
+  GreenApiTelegram,
+  IncomingTextMessage,
+  Notification,
+  OutgoingMessageStatus,
+} from "../api/green-api";
 
 function pause(milliseconds: number, signal: AbortSignal): Promise<void> {
   return new Promise((resolve) => {
     if (signal.aborted) return resolve();
     const finish = () => {
       clearTimeout(timer);
-      signal.removeEventListener('abort', finish);
+      signal.removeEventListener("abort", finish);
       resolve();
     };
     const timer = setTimeout(finish, milliseconds);
-    signal.addEventListener('abort', finish, { once: true });
+    signal.addEventListener("abort", finish, { once: true });
   });
 }
 
 export async function pollNotifications(
-  client: Pick<GreenApiTelegram, 'receiveNotification' | 'deleteNotification'>,
-  { signal, onMessage, onStatus, onError }: {
+  client: Pick<GreenApiTelegram, "receiveNotification" | "deleteNotification">,
+  {
+    signal,
+    onMessage,
+    onStatus,
+    onError,
+  }: {
     signal: AbortSignal;
     onMessage: (message: IncomingTextMessage) => void;
     onStatus: (status: OutgoingMessageStatus) => void;

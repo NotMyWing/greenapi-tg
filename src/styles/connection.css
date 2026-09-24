@@ -12,7 +12,7 @@
   font-size: var(--text-title);
   font-weight: var(--weight-semibold);
   line-height: 1.25;
-  letter-spacing: -.02em;
+  letter-spacing: -0.02em;
 }
 
 .intro {
@@ -43,7 +43,6 @@
 }
 
 @media (max-width: 760px) {
-
   .connection-card {
     margin-block: var(--space-6);
     padding: var(--space-6);

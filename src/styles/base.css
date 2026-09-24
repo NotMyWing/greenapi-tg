@@ -9,11 +9,16 @@ body {
   background: var(--color-canvas);
 }
 
-button, input, textarea {
+button,
+input,
+textarea {
   font: inherit;
 }
 
-button, input, textarea, a {
+button,
+input,
+textarea,
+a {
   -webkit-tap-highlight-color: transparent;
 }
 
@@ -23,7 +28,7 @@ button {
 
 button:disabled {
   cursor: default;
-  opacity: .5;
+  opacity: 0.5;
 }
 
 a {
@@ -55,7 +60,8 @@ label {
   font-weight: var(--weight-medium);
 }
 
-input, textarea {
+input,
+textarea {
   min-width: 0;
   color: var(--color-text);
   background: var(--color-surface);
@@ -70,16 +76,19 @@ input {
   padding: 0 var(--space-3);
 }
 
-input::placeholder, textarea::placeholder {
+input::placeholder,
+textarea::placeholder {
   color: var(--color-muted);
   opacity: 1;
 }
 
-input:disabled, textarea:disabled {
+input:disabled,
+textarea:disabled {
   background: var(--color-canvas);
 }
 
-input:focus, textarea:focus {
+input:focus,
+textarea:focus {
   border-color: var(--color-accent);
 }
 
@@ -102,7 +111,8 @@ input:focus, textarea:focus {
   background: var(--color-accent);
 }
 
-.primary:hover:not(:disabled), .primary:active:not(:disabled) {
+.primary:hover:not(:disabled),
+.primary:active:not(:disabled) {
   background: var(--color-accent-hover);
 }
 
@@ -255,12 +265,12 @@ input:focus, textarea:focus {
 }
 
 @media (max-width: 760px) {
-
   .app-header {
     padding-inline: var(--space-4);
   }
 
-  .brand-provider, .brand-divider {
+  .brand-provider,
+  .brand-divider {
     display: none;
   }
 

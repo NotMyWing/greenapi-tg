@@ -78,7 +78,7 @@
 }
 
 .group-end .message-bubble::before {
-  content: '';
+  content: "";
   position: absolute;
   left: -5px;
   bottom: 0;
@@ -148,8 +148,9 @@
   color: var(--color-message-read);
 }
 
-.message-check::before, .status-read .message-check::after {
-  content: '';
+.message-check::before,
+.status-read .message-check::after {
+  content: "";
   position: absolute;
   top: 0;
   height: 12px;
@@ -170,7 +171,8 @@
   width: 2.5px;
 }
 
-.status-sending, .status-queued {
+.status-sending,
+.status-queued {
   color: var(--color-message-meta);
 }
 
@@ -180,12 +182,10 @@
 
 .message-failed {
   /* Тени рисуют обводку толщиной 1px вокруг сообщения и хвостика. */
-  filter:
-    drop-shadow(1px 0 0 var(--color-danger))
+  filter: drop-shadow(1px 0 0 var(--color-danger))
     drop-shadow(-1px 0 0 var(--color-danger))
     drop-shadow(0 1px 0 var(--color-danger))
-    drop-shadow(0 -1px 0 var(--color-danger))
-    drop-shadow(var(--shadow-bubble));
+    drop-shadow(0 -1px 0 var(--color-danger)) drop-shadow(var(--shadow-bubble));
 }
 
 .message-error {
@@ -242,7 +242,7 @@
 
 .send-button:disabled {
   color: var(--color-muted);
-  opacity: .65;
+  opacity: 0.65;
 }
 
 @media (max-width: 760px) {
@@ -251,7 +251,8 @@
     align-items: flex-end;
   }
 
-  .outgoing .message-avatar, .outgoing .message-author {
+  .outgoing .message-avatar,
+  .outgoing .message-author {
     display: none;
   }
 
