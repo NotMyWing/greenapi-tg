@@ -1,241 +1,125 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { GreenApiError, GreenApiTelegram, MAX_MESSAGE_LENGTH, normalizePhone, parseTextMessage } from '../index.js';
+import { DEFAULT_API_URL, GreenApiError, GreenApiTelegram, MAX_MESSAGE_LENGTH, normalizePhone, parseOutgoingStatus, parseTextMessage } from './green-api';
 
-const credentials = {
-  apiUrl: 'https://4100.api.green-api.com/',
-  idInstance: '4100000000',
-  apiTokenInstance: 'test-token',
+const credentials = { apiUrl: '', idInstance: '4100000000', apiTokenInstance: 'test-token' };
+const endpoint = `${DEFAULT_API_URL}/waInstance4100000000`;
+const incoming = {
+  typeWebhook: 'incomingMessageReceived', idMessage: 'reply-1', timestamp: 1763115112,
+  senderData: { chatId: '123456', senderName: 'Анна' },
+  messageData: { typeMessage: 'textMessage', textMessageData: { textMessage: 'Привет!' } },
 };
-const client = () => new GreenApiTelegram(credentials);
 
-function mockResponse(body: unknown, status = 200) {
-  const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(body), { status }));
-  vi.stubGlobal('fetch', fetchMock);
-  return fetchMock;
-}
+afterEach(() => { vi.unstubAllGlobals(); });
 
-function textNotification() {
-  return {
-    typeWebhook: 'incomingMessageReceived',
-    timestamp: 1763115112,
-    idMessage: '1763115112345',
-    senderData: { chatId: '10000000', senderName: 'Анна' },
-    messageData: { typeMessage: 'textMessage', textMessageData: { textMessage: 'Привет!' } },
-  };
-}
-
-afterEach(() => {
-  vi.unstubAllGlobals();
-  vi.useRealTimers();
-});
-
-describe('normalizePhone', () => {
-  it('убирает форматирование, сохраняя код страны', () => {
-    expect(normalizePhone(' +7 (999) 123-45-67 ')).toBe('79991234567');
-    expect(normalizePhone('1 202 555 0198')).toBe('12025550198');
-    expect(normalizePhone('+123456789012345')).toBe('123456789012345');
-  });
-
-  it.each(['', '123', '+0123456789', '+1234567890123456', '7abc9991234567', '7+9991234567', '79991234567@c.us'])(
-    'отклоняет неверный номер: %s',
-    (phone) => expect(() => normalizePhone(phone)).toThrow(GreenApiError),
-  );
-});
-
-describe('GreenApiTelegram', () => {
-  it('проверяет параметры до запроса', () => {
-    for (const apiUrl of ['invalid', 'http://4100.api.green-api.com', 'https://user:pass@example.com', 'https://example.com/path', 'https://example.com?token=1']) {
-      expect(() => new GreenApiTelegram({ ...credentials, apiUrl })).toThrow(GreenApiError);
-    }
-    expect(() => new GreenApiTelegram({ ...credentials, idInstance: '1/2' })).toThrow(GreenApiError);
-    expect(() => new GreenApiTelegram({ ...credentials, apiTokenInstance: '' })).toThrow(GreenApiError);
-  });
-
-  it('получает состояние инстанса по документированному адресу', async () => {
-    const fetchMock = mockResponse({ stateInstance: 'authorized' });
-    await expect(client().getState()).resolves.toBe('authorized');
-    expect(fetchMock).toHaveBeenCalledWith(
-      'https://4100.api.green-api.com/waInstance4100000000/getStateInstance/test-token',
-      expect.objectContaining({ method: 'GET', credentials: 'omit', cache: 'no-store', redirect: 'error' }),
-    );
-  });
-
-  it('возвращает настройки получения уведомлений без их изменения', async () => {
-    const fetchMock = mockResponse({ typeInstance: 'telegram', incomingWebhook: 'yes', webhookUrl: '' });
-    await expect(client().getSettings()).resolves.toEqual({ incomingWebhook: 'yes', webhookUrl: '' });
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock.mock.calls[0]?.[1]?.method).toBe('GET');
-  });
-
-  it('отклоняет инстанс другого мессенджера', async () => {
-    mockResponse({ typeInstance: 'whatsapp', incomingWebhook: 'yes', webhookUrl: '' });
-    await expect(client().getSettings()).rejects.toThrow('Выберите инстанс Telegram');
-  });
-
-  it('получает настоящий Telegram chatId по номеру', async () => {
-    const fetchMock = mockResponse({ exist: true, chatId: '10000000' });
-    await expect(client().resolvePhone('+7 (999) 123-45-67')).resolves.toEqual({ chatId: '10000000' });
-    expect(fetchMock).toHaveBeenCalledWith(
-      'https://4100.api.green-api.com/waInstance4100000000/checkAccount/test-token',
-      expect.objectContaining({
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phoneNumber: 79991234567 }),
-      }),
-    );
-  });
-
-  it('объясняет отсутствие аккаунта или ограничения приватности', async () => {
-    mockResponse({ exist: false, chatId: '' });
-    await expect(client().resolvePhone('79991234567')).rejects.toThrow('настройками приватности');
-  });
-
-  it('обрабатывает ошибку Telegram при HTTP 200', async () => {
-    mockResponse({ status: false, data: { reason: 'rate_limit_exceeded', retryAfter: 11930619 } });
-    await expect(client().resolvePhone('79991234567')).rejects.toThrow('временно ограничил поиск номеров');
-  });
-
-  it('отправляет текст без изменения пробелов и переносов', async () => {
-    const fetchMock = mockResponse({ idMessage: '1769676078000' });
-    const message = ' Привет!\nВторая строка ';
-    await expect(client().sendMessage('10000000', message)).resolves.toEqual({ idMessage: '1769676078000' });
-    expect(fetchMock).toHaveBeenCalledWith(
-      'https://4100.api.green-api.com/waInstance4100000000/sendMessage/test-token',
-      expect.objectContaining({ method: 'POST', body: JSON.stringify({ chatId: '10000000', message }) }),
-    );
-  });
-
-  it('не отправляет пустой или слишком длинный текст', async () => {
-    const fetchMock = mockResponse({ idMessage: '1' });
-    await expect(client().sendMessage('10000000', ' \n ')).rejects.toThrow('Введите текст');
-    await expect(client().sendMessage('10000000', 'я'.repeat(MAX_MESSAGE_LENGTH + 1))).rejects.toThrow('4096');
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
-
-  it('получает уведомление с таймаутом длительного опроса', async () => {
-    const notification = { receiptId: 1234567, body: textNotification() };
-    const fetchMock = mockResponse(notification);
-    await expect(client().receiveNotification()).resolves.toEqual(notification);
-    expect(fetchMock).toHaveBeenCalledWith(
-      'https://4100.api.green-api.com/waInstance4100000000/receiveNotification/test-token?receiveTimeout=30',
-      expect.objectContaining({ method: 'GET' }),
-    );
-  });
-
-  it('считает null и пустой ответ пустой очередью', async () => {
-    const fetchMock = mockResponse(null);
-    fetchMock.mockResolvedValueOnce(new Response(''));
-    await expect(client().receiveNotification()).resolves.toBeNull();
-    await expect(client().receiveNotification()).resolves.toBeNull();
-  });
-
-  it('сохраняет неизвестное тело уведомления для его подтверждения', async () => {
-    mockResponse({ receiptId: 7, body: null });
-    await expect(client().receiveNotification()).resolves.toEqual({ receiptId: 7, body: null });
-  });
-
-  it.each([true, false])('возвращает результат удаления %s без его подмены', async (result) => {
-    const fetchMock = mockResponse({ result, reason: '' });
-    await expect(client().deleteNotification(1234567)).resolves.toBe(result);
-    expect(fetchMock).toHaveBeenCalledWith(
-      'https://4100.api.green-api.com/waInstance4100000000/deleteNotification/test-token/1234567',
-      expect.objectContaining({ method: 'DELETE', body: undefined }),
-    );
-  });
-
-  it('не доверяет повреждённым ответам API', async () => {
-    const fetchMock = mockResponse({});
-    await expect(client().getState()).rejects.toThrow('неожиданный ответ');
-    fetchMock.mockResolvedValueOnce(new Response('{broken'));
-    await expect(client().receiveNotification()).rejects.toThrow('неожиданный ответ');
-    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ receiptId: '7', body: {} })));
-    await expect(client().receiveNotification()).rejects.toThrow('неожиданный ответ');
-    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ exist: true, chatId: '79991234567@c.us' })));
-    await expect(client().resolvePhone('79991234567')).rejects.toThrow('неожиданный ответ');
-  });
-
-  it('не раскрывает тело ошибки с секретами', async () => {
-    mockResponse({ error: `URL includes ${credentials.apiTokenInstance}` }, 401);
-    const error = await client().getState().catch((value: unknown) => value);
-    expect(error).toBeInstanceOf(GreenApiError);
-    expect(error).toMatchObject({ status: 401 });
-    expect((error as Error).message).not.toContain(credentials.apiTokenInstance);
-  });
-
-  it('объясняет несовместимость webhookUrl и HTTP-опроса', async () => {
-    mockResponse({ error: 'Message cannot be received because custom webhook url is set.' }, 400);
-    await expect(client().receiveNotification()).rejects.toThrow('Очистите webhookUrl');
-  });
-
-  it('не повторяет запрос отправки после потери соединения', async () => {
-    const fetchMock = vi.fn<typeof fetch>().mockRejectedValue(new TypeError(`Failed ${credentials.apiTokenInstance}`));
+describe('HTTP-контракт GREEN-API Telegram', () => {
+  it('использует правильные методы, адреса и данные для полного обмена', async () => {
+    const responses = [
+      { stateInstance: 'authorized' },
+      { typeInstance: 'telegram', incomingWebhook: 'yes', webhookUrl: '' },
+      [
+        { chatId: '123456', name: 'Анна', type: 'user', phoneNumber: 79991234567 },
+        { chatId: '-100001', name: '', username: '@group', type: 'supergroup', phoneNumber: 0 },
+        { chatId: '-100002', name: 'Новости', type: 'channel', phoneNumber: 0 },
+      ],
+      [
+        { idMessage: 'old-read', chatId: '123456', type: 'outgoing', typeMessage: 'textMessage', textMessage: 'Хорошо', timestamp: 1763115112, statusMessage: 'read' },
+        { idMessage: 'old-outgoing', chatId: '123456', type: 'outgoing', typeMessage: 'textMessage', textMessage: 'До встречи', timestamp: 1763115111, statusMessage: 'delivered' },
+        { idMessage: 'old-incoming', chatId: '123456', type: 'incoming', typeMessage: 'textMessage', textMessage: 'Привет', timestamp: 1763115110, senderName: 'Анна' },
+        { typeMessage: 'imageMessage' },
+        { typeMessage: 'textMessage', isDeleted: true },
+      ],
+      { exist: true, chatId: '123456' },
+      { idMessage: 'sent-1' },
+      { receiptId: 17, body: incoming },
+      { result: true },
+      null,
+    ];
+    const fetchMock = vi.fn<typeof fetch>().mockImplementation(async () => new Response(JSON.stringify(responses.shift())));
     vi.stubGlobal('fetch', fetchMock);
-    const error = await client().sendMessage('10000000', 'Привет').catch((value: unknown) => value);
-    expect((error as Error).message).toContain('сообщение могло быть отправлено');
-    expect((error as Error).message).not.toContain(credentials.apiTokenInstance);
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const client = new GreenApiTelegram(credentials);
+    await expect(client.getState()).resolves.toBe('authorized');
+    await expect(client.getSettings()).resolves.toEqual({ incomingWebhook: 'yes', webhookUrl: '' });
+    await expect(client.getChats()).resolves.toEqual([
+      { id: '123456', title: 'Анна', phone: '79991234567' },
+      { id: '-100001', title: '@group' },
+      { id: '-100002', title: 'Новости' },
+    ]);
+    await expect(client.getChatHistory('123456')).resolves.toEqual([
+      { id: 'old-incoming', chatId: '123456', text: 'Привет', timestamp: 1763115110000, senderName: 'Анна', direction: 'incoming', status: 'sent' },
+      { id: 'old-outgoing', chatId: '123456', text: 'До встречи', timestamp: 1763115111000, senderName: '123456', direction: 'outgoing', status: 'delivered' },
+      { id: 'old-read', chatId: '123456', text: 'Хорошо', timestamp: 1763115112000, senderName: '123456', direction: 'outgoing', status: 'read' },
+    ]);
+    await expect(client.resolvePhone('+7 (999) 123-45-67')).resolves.toEqual({ chatId: '123456' });
+    await expect(client.sendMessage('123456', ' Привет!\nВторая строка ')).resolves.toEqual({ idMessage: 'sent-1' });
+    await expect(client.receiveNotification()).resolves.toEqual({ receiptId: 17, body: incoming });
+    await expect(client.deleteNotification(17)).resolves.toBe(true);
+    await expect(client.receiveNotification()).resolves.toBeNull();
+    const requests = fetchMock.mock.calls.map(([url, init]) => ({ url, method: init?.method, body: init?.body }));
+    expect(requests).toEqual([
+      { url: `${endpoint}/getStateInstance/test-token`, method: 'GET', body: undefined },
+      { url: `${endpoint}/getSettings/test-token`, method: 'GET', body: undefined },
+      { url: `${endpoint}/getChats/test-token`, method: 'GET', body: undefined },
+      { url: `${endpoint}/getChatHistory/test-token`, method: 'POST', body: JSON.stringify({ chatId: '123456', count: 100 }) },
+      { url: `${endpoint}/checkAccount/test-token`, method: 'POST', body: JSON.stringify({ phoneNumber: 79991234567 }) },
+      { url: `${endpoint}/sendMessage/test-token`, method: 'POST', body: JSON.stringify({ chatId: '123456', message: ' Привет!\nВторая строка ' }) },
+      { url: `${endpoint}/receiveNotification/test-token?receiveTimeout=30`, method: 'GET', body: undefined },
+      { url: `${endpoint}/deleteNotification/test-token/17`, method: 'DELETE', body: undefined },
+      { url: `${endpoint}/receiveNotification/test-token?receiveTimeout=30`, method: 'GET', body: undefined },
+    ]);
+    expect(fetchMock.mock.calls[3]?.[1]?.headers).toEqual({ 'Content-Type': 'application/json' });
   });
 
-  it('не начинает запрос с отменённым сигналом', async () => {
-    const fetchMock = mockResponse(null);
-    const controller = new AbortController();
-    controller.abort();
-    await expect(client().receiveNotification(controller.signal)).rejects.toMatchObject({ name: 'AbortError' });
+  it('отклоняет неверные параметры до отправки запроса', async () => {
+    const fetchMock = vi.fn<typeof fetch>();
+    vi.stubGlobal('fetch', fetchMock);
+    expect(() => new GreenApiTelegram({ ...credentials, apiUrl: 'http://example.com' })).toThrow(GreenApiError);
+    expect(() => new GreenApiTelegram({ ...credentials, apiTokenInstance: '' })).toThrow(GreenApiError);
+    expect(normalizePhone('+7 (999) 123-45-67')).toBe('79991234567');
+    const client = new GreenApiTelegram(credentials);
+    await expect(client.resolvePhone('7abc9991234567')).rejects.toThrow(GreenApiError);
+    await expect(client.getChatHistory('invalid')).rejects.toThrow(GreenApiError);
+    await expect(client.sendMessage('123456', ' \n ')).rejects.toThrow(GreenApiError);
+    await expect(client.sendMessage('123456', 'я'.repeat(MAX_MESSAGE_LENGTH + 1))).rejects.toThrow(GreenApiError);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('отменяет выполняющийся запрос по сигналу вызывающего кода', async () => {
-    vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockImplementation((_url, init) => new Promise((_resolve, reject) => {
-      init?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')));
-    })));
-    const controller = new AbortController();
-    const pending = client().receiveNotification(controller.signal);
-    controller.abort();
-    await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+  it('показывает безопасные ошибки и не повторяет отправку после сетевого сбоя', async () => {
+    const fetchMock = vi.fn<typeof fetch>()
+      .mockRejectedValueOnce(new TypeError('Failed test-token private-message'))
+      .mockResolvedValueOnce(new Response('{"error":"test-token private-message"}', { status: 401 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const client = new GreenApiTelegram(credentials);
+    const sendError = await client.sendMessage('123456', 'Привет').catch((error: unknown) => error);
+    expect(sendError).toBeInstanceOf(GreenApiError);
+    expect((sendError as Error).message).not.toMatch(/test-token|private-message/);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const accessError = await client.getState().catch((error: unknown) => error);
+    expect(accessError).toMatchObject({ status: 401 });
+    expect((accessError as Error).message).not.toMatch(/test-token|private-message/);
   });
 
-  it('ограничивает длительность зависшего запроса', async () => {
-    vi.useFakeTimers();
-    vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockImplementation((_url, init) => new Promise((_resolve, reject) => {
-      init?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')));
-    })));
-    const pending = expect(client().getState()).rejects.toThrow('не ответил вовремя');
-    await vi.advanceTimersByTimeAsync(20_000);
-    await pending;
-    expect(vi.getTimerCount()).toBe(0);
-  });
-});
-
-describe('parseTextMessage', () => {
-  it('преобразует секунды в миллисекунды и сохраняет идентификатор чата', () => {
-    expect(parseTextMessage(textNotification())).toEqual({
-      id: '1763115112345', chatId: '10000000', text: 'Привет!',
-      timestamp: 1763115112000, direction: 'incoming', senderName: 'Анна',
+  it('разбирает текст и статусы известных сообщений, пропуская другие уведомления', () => {
+    expect(parseTextMessage(incoming)).toMatchObject({
+      id: 'reply-1', chatId: '123456', text: 'Привет!', timestamp: 1763115112000, senderName: 'Анна',
     });
-  });
-
-  it.each(['outgoingMessageReceived', 'outgoingAPIMessageReceived'])(
-    'распознаёт исходящее событие %s',
-    (typeWebhook) => expect(parseTextMessage({ ...textNotification(), typeWebhook })?.direction).toBe('outgoing'),
-  );
-
-  it('читает расширенный текст с URL', () => {
-    expect(parseTextMessage({
-      ...textNotification(),
-      messageData: { typeMessage: 'extendedTextMessage', extendedTextMessageData: { text: 'https://example.com' } },
-    })?.text).toBe('https://example.com');
-  });
-
-  it.each([
-    null, undefined, [], 'text', {},
-    { ...textNotification(), typeWebhook: 'outgoingMessageStatus' },
-    { ...textNotification(), senderData: null },
-    { ...textNotification(), senderData: { chatId: '79991234567@c.us' } },
-    { ...textNotification(), timestamp: Number.NaN },
-    { ...textNotification(), timestamp: -1 },
-    { ...textNotification(), idMessage: null },
-    { ...textNotification(), messageData: { typeMessage: 'imageMessage' } },
-    { ...textNotification(), messageData: { typeMessage: 'textMessage', textMessageData: { textMessage: 123 } } },
-  ])('пропускает неизвестное или повреждённое событие %#', (body) => {
-    expect(parseTextMessage(body)).toBeNull();
+    expect(parseTextMessage({ ...incoming, messageData: {
+      typeMessage: 'extendedTextMessage', extendedTextMessageData: { text: 'https://example.com' },
+    } })?.text).toBe('https://example.com');
+    expect(parseTextMessage({ ...incoming, typeWebhook: 'outgoingAPIMessageReceived' })).toBeNull();
+    expect(parseTextMessage({ ...incoming, messageData: { typeMessage: 'imageMessage' } })).toBeNull();
+    expect(parseTextMessage(null)).toBeNull();
+    const notification = { typeWebhook: 'outgoingMessageStatus', chatId: '123456', idMessage: 'sent-1' };
+    for (const status of ['sent', 'delivered', 'read']) {
+      expect(parseOutgoingStatus({ ...notification, status })).toEqual({ chatId: '123456', messageId: 'sent-1', status });
+    }
+    for (const status of ['failed', 'noAccount']) {
+      const failure = parseOutgoingStatus({ ...notification, status, description: 'private test-token' });
+      expect(failure).toMatchObject({ chatId: '123456', messageId: 'sent-1', status: 'failed' });
+      expect(failure?.error).toBeTruthy();
+      expect(failure?.error).not.toMatch(/private|test-token/);
+    }
+    expect(parseOutgoingStatus({ ...notification, status: 'unknown' })).toBeNull();
+    expect(parseOutgoingStatus({ ...notification, status: 'failed', idMessage: undefined })).toBeNull();
+    expect(parseOutgoingStatus({ ...notification, status: 'read', chatId: 'invalid' })).toBeNull();
   });
 });

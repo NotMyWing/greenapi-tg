@@ -1,60 +1,32 @@
-import { Suspense, use, useEffect, useRef, useState } from 'react';
-import { ConnectionPanel } from './components/ConnectionPanel';
-import { SessionLoading } from './components/SessionLoading';
-import { createSessionRestoration } from './session/restoration';
-import type { SessionRestoration } from './session/restoration';
-import { clearSession, readSession } from './session/storage';
-
-function RestoredConnection({ restoration }: { restoration: SessionRestoration }) {
-  const result = use(restoration.promise);
-  return <ConnectionPanel {...result} />;
-}
+import { useState } from 'react';
+import { faTelegram } from '@fortawesome/free-brands-svg-icons/faTelegram';
+import { faArrowUpRightFromSquare } from '@fortawesome/free-solid-svg-icons/faArrowUpRightFromSquare';
+import { ConnectionForm } from './components/ConnectionForm';
+import { ChatWorkspace } from './chat/ChatWorkspace';
+import { Icon } from './components/Icon';
+import type { Session } from './session/connection';
 
 export function App() {
-  const [restoration, setRestoration] = useState(() => {
-    const credentials = readSession();
-    return credentials ? createSessionRestoration(credentials) : null;
-  });
-  const [notice, setNotice] = useState('');
-  const activeRestoration = useRef(restoration);
-
-  useEffect(() => {
-    activeRestoration.current = restoration;
-    return () => {
-      activeRestoration.current = null;
-      // StrictMode повторяет эффект; отменяем только после настоящего удаления.
-      queueMicrotask(() => {
-        if (activeRestoration.current !== restoration) restoration?.cancel();
-      });
-    };
-  }, [restoration]);
-
-  function cancelRestoration() {
-    restoration?.cancel();
-    const cleared = clearSession();
-    setNotice(cleared ? '' : 'Браузер не разрешил удалить сохранённые данные. Очистите хранилище этой вкладки.');
-    setRestoration(null);
-  }
+  const [session, setSession] = useState<Session | null>(null);
 
   return (
     <div className="app">
       <header className="app-header">
         <a className="brand" href="./" aria-label="Telegram · GREEN-API, главная">
-          <span className="brand-mark" aria-hidden="true">↗</span>
+          <span className="brand-mark"><Icon icon={faTelegram} /></span>
           <span>Telegram <span className="brand-divider">/</span> <span className="brand-provider">GREEN-API</span></span>
         </a>
-        <a className="header-link" href="https://console.green-api.com/" target="_blank" rel="noreferrer">Личный кабинет ↗</a>
+        <a className="header-link" href="https://console.green-api.com/" target="_blank" rel="noreferrer">Личный кабинет <Icon icon={faArrowUpRightFromSquare} /></a>
       </header>
 
       <main className="main">
-        <section className="connection-card" aria-labelledby="connection-title">
-          <span className="eyebrow">TELEGRAM · GREEN-API</span>
-          <Suspense fallback={<SessionLoading onCancel={cancelRestoration} />}>
-            {restoration
-              ? <RestoredConnection restoration={restoration} />
-              : <ConnectionPanel notice={notice} />}
-          </Suspense>
-        </section>
+        {session
+          ? <ChatWorkspace session={session} onDisconnect={() => setSession(null)} />
+          : <section className="connection-card" aria-labelledby="connection-title">
+              <h1 id="connection-title">Подключите Telegram</h1>
+              <p className="intro">Введите данные инстанса из кабинета GREEN-API. Аккаунт Telegram должен быть авторизован.</p>
+              <ConnectionForm onConnect={setSession} />
+            </section>}
       </main>
     </div>
   );

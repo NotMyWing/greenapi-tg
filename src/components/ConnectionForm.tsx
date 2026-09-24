@@ -1,19 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
-import type { Credentials } from '../index';
-import { connectSession, connectionErrorMessage, isAuthenticationError } from '../session/connection';
+import { DEFAULT_API_URL, errorMessage, type Credentials } from '../api/green-api';
+import { connectSession } from '../session/connection';
 import type { Session } from '../session/connection';
 
-interface ConnectionFormProps {
-  initialCredentials: Credentials | null;
-  initialError?: string;
-  onConnect: (session: Session, credentials: Credentials) => void;
-  onForget: () => void;
-}
-
-export function ConnectionForm({ initialCredentials, initialError = '', onConnect, onForget }: ConnectionFormProps) {
+export function ConnectionForm({ onConnect }: { onConnect: (session: Session) => void }) {
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState(initialError);
+  const [error, setError] = useState('');
   const pending = useRef<AbortController | null>(null);
 
   async function connect(credentials: Credentials) {
@@ -26,11 +19,10 @@ export function ConnectionForm({ initialCredentials, initialError = '', onConnec
 
     try {
       const session = await connectSession(credentials, controller.signal);
-      if (!controller.signal.aborted) onConnect(session, credentials);
+      if (!controller.signal.aborted) onConnect(session);
     } catch (cause) {
       if (!controller.signal.aborted) {
-        if (isAuthenticationError(cause)) onForget();
-        setError(connectionErrorMessage(cause));
+        setError(errorMessage(cause));
       }
     } finally {
       if (pending.current === controller) {
@@ -46,7 +38,6 @@ export function ConnectionForm({ initialCredentials, initialError = '', onConnec
     pending.current?.abort();
     pending.current = null;
     setBusy(false);
-    onForget();
   }
 
   function submit(event: FormEvent<HTMLFormElement>) {
@@ -63,16 +54,15 @@ export function ConnectionForm({ initialCredentials, initialError = '', onConnec
     <form onSubmit={submit} aria-label="Подключение к GREEN-API" aria-busy={busy}>
       <fieldset disabled={busy}>
         <legend className="visually-hidden">Данные инстанса</legend>
-        <label htmlFor="api-url">Адрес API</label>
-        <input id="api-url" name="apiUrl" type="url" defaultValue={initialCredentials?.apiUrl} placeholder="https://4100.api.green-api.com" required autoComplete="off" spellCheck={false} aria-describedby="api-url-hint" />
-        <p id="api-url-hint" className="field-hint">Скопируйте apiUrl из личного кабинета.</p>
-
         <label htmlFor="instance-id">ID инстанса</label>
-        <input id="instance-id" name="idInstance" type="text" defaultValue={initialCredentials?.idInstance} inputMode="numeric" pattern="[0-9]+" placeholder="4100000000" required autoComplete="off" />
+        <input id="instance-id" name="idInstance" type="text" inputMode="numeric" pattern="[0-9]+" placeholder="4100000000" required autoComplete="off" />
 
         <label htmlFor="api-token">Токен API</label>
-        <input id="api-token" name="apiTokenInstance" type="password" defaultValue={initialCredentials?.apiTokenInstance} placeholder="apiTokenInstance" required autoComplete="off" spellCheck={false} aria-describedby="token-hint" />
-        <p id="token-hint" className="field-hint">Подключение сохранится после обновления этой вкладки. Кнопка «Отключиться» удалит данные.</p>
+        <input id="api-token" name="apiTokenInstance" type="password" placeholder="apiTokenInstance" required autoComplete="off" spellCheck={false} />
+
+        <label htmlFor="api-url">Адрес API (необязательно)</label>
+        <input id="api-url" name="apiUrl" type="url" placeholder={DEFAULT_API_URL} autoComplete="off" spellCheck={false} aria-describedby="api-url-hint" />
+        <p id="api-url-hint" className="field-hint">Оставьте пустым, чтобы использовать стандартный сервер GREEN-API.</p>
       </fieldset>
 
       {error && <p className="notice error" role="alert">{error}</p>}
