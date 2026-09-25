@@ -31,7 +31,7 @@ export function App() {
           target="_blank"
           rel="noreferrer"
         >
-          Личный кабинет <Icon icon={faArrowUpRightFromSquare} />
+          Личный кабинет GREEN-API <Icon icon={faArrowUpRightFromSquare} />
         </a>
       </header>
 
