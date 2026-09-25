@@ -34,7 +34,6 @@ export function ChatWorkspace({ session, onDisconnect }: ChatWorkspaceProps) {
   const moveFocus = useRef(false);
   const active = chat.chats.find((item) => item.id === chat.activeChatId);
   const composer = useAutosizeTextarea(active?.draft, active?.id);
-  const activeTitle = active?.title;
   const receivingProblem = !chat.receivingEnabled || chat.receiveError;
 
   useLayoutEffect(() => {
@@ -124,7 +123,6 @@ export function ChatWorkspace({ session, onDisconnect }: ChatWorkspaceProps) {
           <ul>
             {chat.chats.map((item) => {
               const lastMessage = item.messages.at(-1);
-              const title = item.title;
               return (
                 <li key={item.id}>
                   <button
@@ -133,9 +131,9 @@ export function ChatWorkspace({ session, onDisconnect }: ChatWorkspaceProps) {
                     aria-current={item.id === active?.id ? "true" : undefined}
                     onClick={() => selectChat(item.id)}
                   >
-                    <Avatar id={item.id} name={title} size={48} />
+                    <Avatar id={item.id} name={item.title} size={48} />
                     <span className="chat-item-content">
-                      <span className="chat-item-title">{title}</span>
+                      <span className="chat-item-title">{item.title}</span>
                       <span className="chat-preview">
                         {item.draft
                           ? `Черновик: ${item.draft}`
@@ -205,8 +203,8 @@ export function ChatWorkspace({ session, onDisconnect }: ChatWorkspaceProps) {
             <Icon icon={faArrowLeft} />
           </button>
           {active && <Avatar id={active.id} name={active.title} size={40} />}
-          <h2 ref={conversationTitle} tabIndex={-1} title={activeTitle}>
-            {activeTitle ?? "Сообщения"}
+          <h2 ref={conversationTitle} tabIndex={-1} title={active?.title}>
+            {active?.title ?? "Сообщения"}
           </h2>
         </header>
 
@@ -321,7 +319,6 @@ export function ChatWorkspace({ session, onDisconnect }: ChatWorkspaceProps) {
   );
 }
 
-// Vite отслеживает правки хуков в файле компонента.
 function useChat(session: Session) {
   const [state, dispatch] = useReducer(chatReducer, {
     chats: [],

@@ -59,7 +59,7 @@ afterEach(async () => {
 });
 
 describe("очередь уведомлений", () => {
-  it("тихо продолжает опрос после HTTP 408 и локального таймаута, сохраняя ошибки удаления", async () => {
+  it("повторяет опрос без предупреждения после HTTP 408 и локального таймаута, но сообщает об ошибках удаления", async () => {
     const { controller, onMessage, onStatus, onError } = setup();
     const timeout: typeof fetch = (_url, init) =>
       new Promise((_, reject) => {

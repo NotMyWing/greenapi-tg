@@ -1,6 +1,7 @@
 import type {
   HistoryMessage,
   IncomingTextMessage,
+  MessageStatus,
   OutgoingMessageStatus,
   TelegramChat,
 } from "../api/green-api";
@@ -10,14 +11,7 @@ export interface ChatMessage {
   text: string;
   timestamp: number;
   direction: "incoming" | "outgoing";
-  status:
-    | "sending"
-    | "queued"
-    | "sent"
-    | "delivered"
-    | "read"
-    | "received"
-    | "failed";
+  status: MessageStatus | "sending" | "received";
   senderName?: string;
   error?: string;
 }
@@ -193,7 +187,10 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           return { ...chat, draft: action.text };
         case "sending":
           return { ...chat, messages: [...chat.messages, action.message] };
-        case "sent":
+        case "sent": {
+          const status =
+            chat.messages.find((message) => message.id === action.messageId)
+              ?.status ?? "queued";
           return {
             ...chat,
             draft: "",
@@ -202,17 +199,13 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
               .map((message) =>
                 message.id === action.localId
                   ? {
-                      ...advanceStatus(
-                        message,
-                        chat.messages.find(
-                          (item) => item.id === action.messageId,
-                        )?.status ?? "queued",
-                      ),
+                      ...advanceStatus(message, status),
                       id: action.messageId,
                     }
                   : message,
               ),
           };
+        }
         case "failed":
           return {
             ...chat,

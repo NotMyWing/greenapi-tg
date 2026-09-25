@@ -1,4 +1,4 @@
-// @vitest-environment jsdom: запускаем тесты в среде браузера.
+// @vitest-environment jsdom
 import { StrictMode } from "react";
 import {
   act,
@@ -94,9 +94,9 @@ async function openChat(user: ReturnType<typeof userEvent.setup>) {
 }
 
 function draft() {
-  return screen.getByRole("textbox", {
+  return screen.getByRole<HTMLTextAreaElement>("textbox", {
     name: "Сообщение",
-  }) as HTMLTextAreaElement;
+  });
 }
 
 describe("основной сценарий Telegram", () => {
@@ -278,7 +278,7 @@ describe("основной сценарий Telegram", () => {
     );
   });
 
-  it("сохраняет раннюю доставку и обновляет галочки до прочтения без отката", async () => {
+  it("учитывает статус доставки, полученный до ответа sendMessage, и не откатывает галочки после прочтения", async () => {
     let finishSend!: (result: { idMessage: string }) => void;
     vi.mocked(GreenApiTelegram.prototype.sendMessage).mockImplementationOnce(
       () =>
@@ -339,11 +339,9 @@ describe("основной сценарий Telegram", () => {
         /Доступ запрещён|Авторизуйте инстанс/,
       );
       expect(
-        (
-          screen.getByRole("button", {
-            name: "Подключиться",
-          }) as HTMLButtonElement
-        ).disabled,
+        screen.getByRole<HTMLButtonElement>("button", {
+          name: "Подключиться",
+        }).disabled,
       ).toBe(false);
       expect(GreenApiTelegram.prototype.getSettings).not.toHaveBeenCalled();
       expect(
@@ -391,10 +389,10 @@ describe("основной сценарий Telegram", () => {
       "Аккаунт не найден",
     );
     expect(
-      (screen.getByLabelText("Номер телефона") as HTMLInputElement).value,
+      screen.getByLabelText<HTMLInputElement>("Номер телефона").value,
     ).toBe(phone);
     expect(
-      (screen.getByRole("button", { name: "Новый чат" }) as HTMLButtonElement)
+      screen.getByRole<HTMLButtonElement>("button", { name: "Новый чат" })
         .disabled,
     ).toBe(false);
     expect(screen.queryByRole("textbox", { name: "Сообщение" })).toBeNull();
@@ -465,11 +463,11 @@ describe("основной сценарий Telegram", () => {
     await user.click(screen.getByRole("button", { name: "Отключиться" }));
     expect(sendSignal?.aborted).toBe(true);
     expect(receiveSignal?.aborted).toBe(true);
-    expect((screen.getByLabelText("Токен API") as HTMLInputElement).value).toBe(
+    expect(screen.getByLabelText<HTMLInputElement>("Токен API").value).toBe(
       "",
     );
     expect(
-      (screen.getByLabelText("ID инстанса") as HTMLInputElement).value,
+      screen.getByLabelText<HTMLInputElement>("ID инстанса").value,
     ).toBe("");
   });
 });

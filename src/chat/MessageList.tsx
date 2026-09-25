@@ -54,12 +54,11 @@ export function MessageList({
       aria-busy={loading}
       tabIndex={0}
       ref={container}
-      onScroll={() => {
-        const element = container.current;
-        if (element)
-          followLatest.current =
-            element.scrollHeight - element.scrollTop - element.clientHeight <
-            80;
+      onScroll={(event) => {
+        const element = event.currentTarget;
+        followLatest.current =
+          element.scrollHeight - element.scrollTop - element.clientHeight <
+          80;
       }}
     >
       {loading && (
@@ -75,6 +74,8 @@ export function MessageList({
           const previous = messages[index - 1];
           const next = messages[index + 1];
           const date = dateFormat.format(message.timestamp);
+          const dateStart =
+            !previous || dateFormat.format(previous.timestamp) !== date;
           const authorId = message.direction === "outgoing" ? "self" : chatId;
           const name =
             message.direction === "outgoing"
@@ -82,10 +83,9 @@ export function MessageList({
               : message.senderName || chatTitle;
           // Начинаем новую группу при смене автора, даты или паузе больше пяти минут.
           const groupStart =
-            !previous ||
+            dateStart ||
             previous.direction !== message.direction ||
             previous.senderName !== message.senderName ||
-            dateFormat.format(previous.timestamp) !== date ||
             message.timestamp - previous.timestamp > 300_000;
           const groupEnd =
             !next ||
@@ -98,8 +98,7 @@ export function MessageList({
               key={message.id}
               className={`message-row ${message.direction}${groupEnd ? " group-end" : ""}`}
             >
-              {(!previous ||
-                dateFormat.format(previous.timestamp) !== date) && (
+              {dateStart && (
                 <div className="message-date">{date}</div>
               )}
               <div className="message-content">

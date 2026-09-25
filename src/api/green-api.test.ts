@@ -246,20 +246,22 @@ describe("HTTP-контракт GREEN-API Telegram", () => {
       .sendMessage("123456", "Привет")
       .catch((error: unknown) => error);
     expect(sendError).toBeInstanceOf(GreenApiError);
-    expect((sendError as Error).message).not.toMatch(
-      /test-token|private-message/,
+    expect(sendError).toHaveProperty(
+      "message",
+      expect.not.stringMatching(/test-token|private-message/),
     );
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const accessError = await client
       .getState()
       .catch((error: unknown) => error);
     expect(accessError).toMatchObject({ status: 401 });
-    expect((accessError as Error).message).not.toMatch(
-      /test-token|private-message/,
+    expect(accessError).toHaveProperty(
+      "message",
+      expect.not.stringMatching(/test-token|private-message/),
     );
   });
 
-  it("разбирает текст и статусы известных сообщений, пропуская другие уведомления", () => {
+  it("разбирает текст и статусы доставки, пропуская неподдерживаемые уведомления", () => {
     expect(parseTextMessage(incoming)).toMatchObject({
       id: "reply-1",
       chatId: "123456",

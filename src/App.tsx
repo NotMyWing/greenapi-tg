@@ -48,8 +48,8 @@ export function App() {
           >
             <h1 id="connection-title">Подключите Telegram</h1>
             <p className="intro">
-              Введите данные инстанса из кабинета GREEN-API. Аккаунт Telegram
-              должен быть авторизован.
+              В кабинете GREEN-API авторизуйте аккаунт Telegram. Затем
+              введите здесь данные инстанса.
             </p>
             <ConnectionForm onConnect={setSession} />
           </section>

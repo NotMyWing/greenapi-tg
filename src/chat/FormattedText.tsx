@@ -38,19 +38,32 @@ export function FormattedText({ text }: { text: string }) {
   let position = 0;
   let match: RegExpExecArray | null;
   while ((match = pattern.exec(text))) {
+    const [
+      matchedText,
+      code,
+      label,
+      linkProtocol,
+      bareProtocol,
+      bold,
+      underscoreBold,
+      strikethrough,
+      telegramBold,
+      italic,
+    ] = match;
+    const protocol = linkProtocol ?? bareProtocol;
     parts.push(text.slice(position, match.index));
-    let raw = match[0];
+    let raw = matchedText;
     let content: ReactNode = raw;
-    if (match[1]) content = <code>{match[1]}</code>;
-    else if (match[3] || match[4]) {
-      const start = pattern.lastIndex - (match[3] ?? match[4]!).length;
+    if (code) content = <code>{code}</code>;
+    else if (protocol) {
+      const start = pattern.lastIndex - protocol.length;
       const end = urlEnd(text, start);
-      const closed = !match[3] || text[end] === ")";
-      raw = text.slice(match.index, end + (match[3] && closed ? 1 : 0));
+      const closed = !linkProtocol || text[end] === ")";
+      raw = text.slice(match.index, end + (linkProtocol && closed ? 1 : 0));
       pattern.lastIndex = match.index + raw.length;
       content = raw;
       const candidate = text.slice(start, end);
-      const address = match[3]
+      const address = linkProtocol
         ? candidate
         : candidate.replace(/[.,!?;:]+$/, "");
       const href = safeHref(address);
@@ -58,17 +71,18 @@ export function FormattedText({ text }: { text: string }) {
         content = (
           <>
             <a href={href} target="_blank" rel="noopener noreferrer">
-              {match[2] ?? address}
+              {label ?? address}
             </a>
-            {match[4] ? raw.slice(address.length) : ""}
+            {bareProtocol ? raw.slice(address.length) : ""}
           </>
         );
     } else {
-      const value = match[5] ?? match[6] ?? match[7] ?? match[8] ?? match[9];
+      const value =
+        bold ?? underscoreBold ?? strikethrough ?? telegramBold ?? italic;
       if (value && value.trim() === value) {
-        if (match[5] || match[6] || match[8])
+        if (bold || underscoreBold || telegramBold)
           content = <strong>{value}</strong>;
-        else if (match[7]) content = <s>{value}</s>;
+        else if (strikethrough) content = <s>{value}</s>;
         else content = <em>{value}</em>;
       }
     }

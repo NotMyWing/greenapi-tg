@@ -9,10 +9,10 @@ npm ci
 npm run dev
 ```
 
-Откройте адрес из терминала.
+Откройте в браузере адрес из терминала.
 
 1. Авторизуйте инстанс Telegram в [кабинете GREEN-API](https://console.green-api.com/).
 2. Включите `incomingWebhook`, `outgoingMessageWebhook`, `outgoingAPIMessageWebhook` и `outgoingWebhook`. Очистите `webhookUrl`.
 3. Введите данные инстанса в приложении. Выберите чат или создайте его по номеру телефона.
 
-Тесты: `npm test`. Сборка: `npm run build`, результат в папке `dist/`.
+Запустите тесты командой `npm test`. Команда `npm run build` сохранит сборку в папке `dist/`.

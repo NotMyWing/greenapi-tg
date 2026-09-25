@@ -118,7 +118,7 @@ function normalizeCredentials(credentials: Credentials): Credentials {
     url = new URL(credentials.apiUrl.trim() || DEFAULT_API_URL);
   } catch {
     throw new GreenApiError(
-      "Укажите apiUrl из личного кабинета GREEN-API, начиная с https://.",
+      "Скопируйте apiUrl из личного кабинета GREEN-API. Адрес должен начинаться с https://.",
     );
   }
   if (
@@ -139,7 +139,7 @@ function normalizeCredentials(credentials: Credentials): Credentials {
     throw new GreenApiError("idInstance должен содержать только цифры.");
   if (!/^[\w-]+$/.test(apiTokenInstance))
     throw new GreenApiError(
-      "Укажите корректный apiTokenInstance из личного кабинета.",
+      "Проверьте apiTokenInstance: скопируйте токен из личного кабинета.",
     );
   return { apiUrl: url.origin, idInstance, apiTokenInstance };
 }
@@ -153,11 +153,19 @@ export class GreenApiTelegram {
 
   async #request(
     method: string,
-    signal?: AbortSignal,
-    body?: Record<string, unknown>,
-    suffix = "",
-    timeout = 20_000,
-    verb = body ? "POST" : "GET",
+    {
+      signal,
+      body,
+      suffix = "",
+      timeout = 20_000,
+      verb = body ? "POST" : "GET",
+    }: {
+      signal?: AbortSignal;
+      body?: Record<string, unknown>;
+      suffix?: string;
+      timeout?: number;
+      verb?: "GET" | "POST" | "DELETE";
+    },
   ): Promise<unknown> {
     const { apiUrl, idInstance, apiTokenInstance } = this.#credentials;
     const controller = new AbortController();
@@ -194,7 +202,7 @@ export class GreenApiTelegram {
     } catch (error) {
       signal?.throwIfAborted();
       if (error instanceof GreenApiError) throw error;
-      // Считаем конец ожидания пустым ответом. Цикл опроса начнёт новый запрос.
+      // При таймауте возвращаем пустой ответ, чтобы цикл опроса повторил запрос.
       if (method === "receiveNotification" && controller.signal.aborted)
         return null;
       const message = controller.signal.aborted
@@ -203,7 +211,7 @@ export class GreenApiTelegram {
       throw new GreenApiError(
         message +
           (method === "sendMessage"
-            ? " Перед повтором проверьте чат в Telegram: сообщение могло быть отправлено."
+            ? " Перед повторной отправкой проверьте чат в Telegram: сообщение могло уже уйти."
             : " Попробуйте ещё раз."),
       );
     } finally {
@@ -213,19 +221,16 @@ export class GreenApiTelegram {
   }
 
   async getState(signal?: AbortSignal): Promise<string> {
-    const data = await this.#request(
-      "getStateInstance",
+    const data = await this.#request("getStateInstance", {
       signal,
-      undefined,
-      "",
-      5_000,
-    );
+      timeout: 5_000,
+    });
     if (!isRecord(data) || !isText(data.stateInstance)) throw invalidResponse();
     return data.stateInstance;
   }
 
   async getSettings(signal?: AbortSignal): Promise<InstanceSettings> {
-    const data = await this.#request("getSettings", signal);
+    const data = await this.#request("getSettings", { signal });
     if (
       !isRecord(data) ||
       typeof data.webhookUrl !== "string" ||
@@ -243,7 +248,7 @@ export class GreenApiTelegram {
   }
 
   async getChats(signal?: AbortSignal): Promise<TelegramChat[]> {
-    const data = await this.#request("getChats", signal);
+    const data = await this.#request("getChats", { signal });
     if (!Array.isArray(data)) throw invalidResponse();
     return data.map((chat: unknown) => {
       if (
@@ -275,9 +280,9 @@ export class GreenApiTelegram {
   ): Promise<HistoryMessage[]> {
     if (!/^-?[1-9]\d*$/.test(chatId))
       throw new GreenApiError("Некорректный идентификатор чата Telegram.");
-    const data = await this.#request("getChatHistory", signal, {
-      chatId,
-      count: 100,
+    const data = await this.#request("getChatHistory", {
+      signal,
+      body: { chatId, count: 100 },
     });
     if (!Array.isArray(data)) throw invalidResponse();
     const messages: HistoryMessage[] = [];
@@ -319,14 +324,15 @@ export class GreenApiTelegram {
     phone: string,
     signal?: AbortSignal,
   ): Promise<{ chatId: string }> {
-    const data = await this.#request("checkAccount", signal, {
-      phoneNumber: Number(normalizePhone(phone)),
+    const data = await this.#request("checkAccount", {
+      signal,
+      body: { phoneNumber: Number(normalizePhone(phone)) },
     });
     if (!isRecord(data) || typeof data.exist !== "boolean")
       throw invalidResponse();
     if (!data.exist)
       throw new GreenApiError(
-        "Аккаунт Telegram не найден или поиск по номеру ограничен настройками приватности.",
+        "Аккаунт Telegram не найден или его настройки приватности ограничивают поиск по номеру.",
       );
     if (typeof data.chatId !== "string" || !/^[1-9]\d*$/.test(data.chatId))
       throw invalidResponse();
@@ -344,11 +350,11 @@ export class GreenApiTelegram {
     if (!message.trim()) throw new GreenApiError("Введите текст сообщения.");
     if (message.length > MAX_MESSAGE_LENGTH)
       throw new GreenApiError(
-        "Сообщение должно содержать не более 4096 символов.",
+        "Сообщение слишком длинное. Сократите его до 4096 символов.",
       );
-    const data = await this.#request("sendMessage", signal, {
-      chatId,
-      message,
+    const data = await this.#request("sendMessage", {
+      signal,
+      body: { chatId, message },
     });
     if (!isRecord(data) || !isText(data.idMessage)) throw invalidResponse();
     return { idMessage: data.idMessage };
@@ -357,13 +363,11 @@ export class GreenApiTelegram {
   async receiveNotification(
     signal?: AbortSignal,
   ): Promise<Notification | null> {
-    const data = await this.#request(
-      "receiveNotification",
+    const data = await this.#request("receiveNotification", {
       signal,
-      undefined,
-      "?receiveTimeout=30",
-      40_000,
-    );
+      suffix: "?receiveTimeout=30",
+      timeout: 40_000,
+    });
     if (data === null) return null;
     if (
       !isRecord(data) ||
@@ -382,21 +386,17 @@ export class GreenApiTelegram {
   ): Promise<boolean> {
     if (!Number.isSafeInteger(receiptId) || receiptId < 0)
       throw new GreenApiError("Некорректный идентификатор уведомления.");
-    const data = await this.#request(
-      "deleteNotification",
+    const data = await this.#request("deleteNotification", {
       signal,
-      undefined,
-      `/${receiptId}`,
-      20_000,
-      "DELETE",
-    );
+      suffix: `/${receiptId}`,
+      verb: "DELETE",
+    });
     if (!isRecord(data) || typeof data.result !== "boolean")
       throw invalidResponse();
     return data.result;
   }
 }
 
-/** Извлекаем текст и данные автора из входящего уведомления. */
 export function parseTextMessage(body: unknown): IncomingTextMessage | null {
   if (
     !isRecord(body) ||
